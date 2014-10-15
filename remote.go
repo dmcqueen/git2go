@@ -421,6 +421,14 @@ func (o *Remote) SetPushRefspecs(refspecs []string) error {
 	return nil
 }
 
+func (o *Remote) Delete() error {
+        ret := C.git_remote_delete(o.ptr);
+        if ret < 0 {
+                return MakeGitError(ret)
+        }
+        return nil
+}
+
 func (o *Remote) ClearRefspecs() {
 	C.git_remote_clear_refspecs(o.ptr)
 }
@@ -430,11 +438,7 @@ func (o *Remote) RefspecCount() uint {
 }
 
 func (o *Remote) SetUpdateFetchHead(val bool) {
-        i := 0
-        if val {
-            i = 1
-        }
-        C.git_remote_set_update_fetchhead(o.ptr, C.int(i)) 
+        C.git_remote_set_update_fetchhead(o.ptr, cbool(val)) 
 }
 
 func (o *Remote) UpdateFetchHead() bool {
