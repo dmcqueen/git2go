@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 #include <git2/pack.h>
 #include <stdlib.h>
 
@@ -129,8 +128,11 @@ func packbuilderForEachCb(buf unsafe.Pointer, size C.size_t, payload unsafe.Poin
 func (pb *Packbuilder) ForEach(callback PackbuilderForeachCallback) error {
 	data := packbuilderCbData{
 		callback: callback,
-		err: nil,
+		err:      nil,
 	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	err := C._go_git_packbuilder_foreach(pb.ptr, unsafe.Pointer(&data))
 	if err == C.GIT_EUSER {

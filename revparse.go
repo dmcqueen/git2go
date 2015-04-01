@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 
 extern void _go_git_revspec_free(git_revspec *revspec);
 */
@@ -16,8 +15,8 @@ type RevparseFlag int
 
 const (
 	RevparseSingle    RevparseFlag = C.GIT_REVPARSE_SINGLE
-	RevparseRange                  = C.GIT_REVPARSE_RANGE
-	RevparseMergeBase              = C.GIT_REVPARSE_MERGE_BASE
+	RevparseRange     RevparseFlag = C.GIT_REVPARSE_RANGE
+	RevparseMergeBase RevparseFlag = C.GIT_REVPARSE_MERGE_BASE
 )
 
 type Revspec struct {

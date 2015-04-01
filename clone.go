@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 
 */
 import "C"
@@ -31,6 +30,7 @@ func Clone(url string, path string, options *CloneOptions) (*Repository, error) 
 
 	var copts C.git_clone_options
 	populateCloneOptions(&copts, options)
+	defer freeCheckoutOpts(&copts.checkout_opts)
 
 	if len(options.CheckoutBranch) != 0 {
 		copts.checkout_branch = C.CString(options.CheckoutBranch)
@@ -56,11 +56,7 @@ func populateCloneOptions(ptr *C.git_clone_options, opts *CloneOptions) {
 	}
 	populateCheckoutOpts(&ptr.checkout_opts, opts.CheckoutOpts)
 	populateRemoteCallbacks(&ptr.remote_callbacks, opts.RemoteCallbacks)
-	if opts.Bare {
-		ptr.bare = 1
-	} else {
-		ptr.bare = 0
-	}
+	ptr.bare = cbool(opts.Bare)
 
 	if opts.RemoteCreateCallback != nil {
 		ptr.remote_cb = opts.RemoteCreateCallback

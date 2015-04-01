@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 
 extern int _go_git_visit_submodule(git_repository *repo, void *fct);
 */
@@ -11,6 +10,14 @@ import (
 	"runtime"
 	"unsafe"
 )
+
+// SubmoduleUpdateOptions
+type SubmoduleUpdateOptions struct {
+	*CheckoutOpts
+	*RemoteCallbacks
+	CloneCheckoutStrategy CheckoutStrategy
+	Signature             *Signature
+}
 
 // Submodule
 type Submodule struct {
@@ -21,47 +28,47 @@ type SubmoduleUpdate int
 
 const (
 	SubmoduleUpdateReset    SubmoduleUpdate = C.GIT_SUBMODULE_UPDATE_RESET
-	SubmoduleUpdateCheckout                 = C.GIT_SUBMODULE_UPDATE_CHECKOUT
-	SubmoduleUpdateRebase                   = C.GIT_SUBMODULE_UPDATE_REBASE
-	SubmoduleUpdateMerge                    = C.GIT_SUBMODULE_UPDATE_MERGE
-	SubmoduleUpdateNone                     = C.GIT_SUBMODULE_UPDATE_NONE
+	SubmoduleUpdateCheckout SubmoduleUpdate = C.GIT_SUBMODULE_UPDATE_CHECKOUT
+	SubmoduleUpdateRebase   SubmoduleUpdate = C.GIT_SUBMODULE_UPDATE_REBASE
+	SubmoduleUpdateMerge    SubmoduleUpdate = C.GIT_SUBMODULE_UPDATE_MERGE
+	SubmoduleUpdateNone     SubmoduleUpdate = C.GIT_SUBMODULE_UPDATE_NONE
 )
 
 type SubmoduleIgnore int
 
 const (
 	SubmoduleIgnoreReset     SubmoduleIgnore = C.GIT_SUBMODULE_IGNORE_RESET
-	SubmoduleIgnoreNone                      = C.GIT_SUBMODULE_IGNORE_NONE
-	SubmoduleIgnoreUntracked                 = C.GIT_SUBMODULE_IGNORE_UNTRACKED
-	SubmoduleIgnoreDirty                     = C.GIT_SUBMODULE_IGNORE_DIRTY
-	SubmoduleIgnoreAll                       = C.GIT_SUBMODULE_IGNORE_ALL
+	SubmoduleIgnoreNone      SubmoduleIgnore = C.GIT_SUBMODULE_IGNORE_NONE
+	SubmoduleIgnoreUntracked SubmoduleIgnore = C.GIT_SUBMODULE_IGNORE_UNTRACKED
+	SubmoduleIgnoreDirty     SubmoduleIgnore = C.GIT_SUBMODULE_IGNORE_DIRTY
+	SubmoduleIgnoreAll       SubmoduleIgnore = C.GIT_SUBMODULE_IGNORE_ALL
 )
 
 type SubmoduleStatus int
 
 const (
 	SubmoduleStatusInHead          SubmoduleStatus = C.GIT_SUBMODULE_STATUS_IN_HEAD
-	SubmoduleStatusInIndex                         = C.GIT_SUBMODULE_STATUS_IN_INDEX
-	SubmoduleStatusInConfig                        = C.GIT_SUBMODULE_STATUS_IN_CONFIG
-	SubmoduleStatusInWd                            = C.GIT_SUBMODULE_STATUS_IN_WD
-	SubmoduleStatusIndexAdded                      = C.GIT_SUBMODULE_STATUS_INDEX_ADDED
-	SubmoduleStatusIndexDeleted                    = C.GIT_SUBMODULE_STATUS_INDEX_DELETED
-	SubmoduleStatusIndexModified                   = C.GIT_SUBMODULE_STATUS_INDEX_MODIFIED
-	SubmoduleStatusWdUninitialized                 = C.GIT_SUBMODULE_STATUS_WD_UNINITIALIZED
-	SubmoduleStatusWdAdded                         = C.GIT_SUBMODULE_STATUS_WD_ADDED
-	SubmoduleStatusWdDeleted                       = C.GIT_SUBMODULE_STATUS_WD_DELETED
-	SubmoduleStatusWdModified                      = C.GIT_SUBMODULE_STATUS_WD_MODIFIED
-	SubmoduleStatusWdIndexModified                 = C.GIT_SUBMODULE_STATUS_WD_INDEX_MODIFIED
-	SubmoduleStatusWdWdModified                    = C.GIT_SUBMODULE_STATUS_WD_WD_MODIFIED
-	SubmoduleStatusWdUntracked                     = C.GIT_SUBMODULE_STATUS_WD_UNTRACKED
+	SubmoduleStatusInIndex         SubmoduleStatus = C.GIT_SUBMODULE_STATUS_IN_INDEX
+	SubmoduleStatusInConfig        SubmoduleStatus = C.GIT_SUBMODULE_STATUS_IN_CONFIG
+	SubmoduleStatusInWd            SubmoduleStatus = C.GIT_SUBMODULE_STATUS_IN_WD
+	SubmoduleStatusIndexAdded      SubmoduleStatus = C.GIT_SUBMODULE_STATUS_INDEX_ADDED
+	SubmoduleStatusIndexDeleted    SubmoduleStatus = C.GIT_SUBMODULE_STATUS_INDEX_DELETED
+	SubmoduleStatusIndexModified   SubmoduleStatus = C.GIT_SUBMODULE_STATUS_INDEX_MODIFIED
+	SubmoduleStatusWdUninitialized SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_UNINITIALIZED
+	SubmoduleStatusWdAdded         SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_ADDED
+	SubmoduleStatusWdDeleted       SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_DELETED
+	SubmoduleStatusWdModified      SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_MODIFIED
+	SubmoduleStatusWdIndexModified SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_INDEX_MODIFIED
+	SubmoduleStatusWdWdModified    SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_WD_MODIFIED
+	SubmoduleStatusWdUntracked     SubmoduleStatus = C.GIT_SUBMODULE_STATUS_WD_UNTRACKED
 )
 
 type SubmoduleRecurse int
 
 const (
 	SubmoduleRecurseNo       SubmoduleRecurse = C.GIT_SUBMODULE_RECURSE_NO
-	SubmoduleRecurseYes                       = C.GIT_SUBMODULE_RECURSE_YES
-	SubmoduleRecurseOndemand                  = C.GIT_SUBMODULE_RECURSE_ONDEMAND
+	SubmoduleRecurseYes      SubmoduleRecurse = C.GIT_SUBMODULE_RECURSE_YES
+	SubmoduleRecurseOndemand SubmoduleRecurse = C.GIT_SUBMODULE_RECURSE_ONDEMAND
 )
 
 func SubmoduleStatusIsUnmodified(status int) bool {
@@ -90,10 +97,10 @@ func (repo *Repository) LookupSubmodule(name string) (*Submodule, error) {
 type SubmoduleCbk func(sub *Submodule, name string) int
 
 //export SubmoduleVisitor
-func SubmoduleVisitor(csub unsafe.Pointer, name string, cfct unsafe.Pointer) int {
+func SubmoduleVisitor(csub unsafe.Pointer, name *C.char, cfct unsafe.Pointer) C.int {
 	sub := &Submodule{(*C.git_submodule)(csub)}
 	fct := *(*SubmoduleCbk)(cfct)
-	return fct(sub, name)
+	return (C.int)(fct(sub, C.GoString(name)))
 }
 
 func (repo *Repository) ForeachSubmodule(cbk SubmoduleCbk) error {
@@ -227,8 +234,8 @@ func (sub *Submodule) SetIgnore(ignore SubmoduleIgnore) SubmoduleIgnore {
 	return SubmoduleIgnore(o)
 }
 
-func (sub *Submodule) Update() SubmoduleUpdate {
-	o := C.git_submodule_update(sub.ptr)
+func (sub *Submodule) UpdateStrategy() SubmoduleUpdate {
+	o := C.git_submodule_update_strategy(sub.ptr)
 	return SubmoduleUpdate(o)
 }
 
@@ -306,5 +313,43 @@ func (repo *Repository) ReloadAllSubmodules(force bool) error {
 	if ret < 0 {
 		return MakeGitError(ret)
 	}
+	return nil
+}
+
+func (sub *Submodule) Update(init bool, opts *SubmoduleUpdateOptions) error {
+	var copts C.git_submodule_update_options
+	err := populateSubmoduleUpdateOptions(&copts, opts)
+	if err != nil {
+		return err
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ret := C.git_submodule_update(sub.ptr, cbool(init), &copts)
+	if ret < 0 {
+		return MakeGitError(ret)
+	}
+
+	return nil
+}
+
+func populateSubmoduleUpdateOptions(ptr *C.git_submodule_update_options, opts *SubmoduleUpdateOptions) error {
+	C.git_submodule_update_init_options(ptr, C.GIT_SUBMODULE_UPDATE_OPTIONS_VERSION)
+
+	if opts == nil {
+		return nil
+	}
+
+	populateCheckoutOpts(&ptr.checkout_opts, opts.CheckoutOpts)
+	populateRemoteCallbacks(&ptr.remote_callbacks, opts.RemoteCallbacks)
+	ptr.clone_checkout_strategy = C.uint(opts.CloneCheckoutStrategy)
+
+	sig, err := opts.Signature.toC()
+	if err != nil {
+		return err
+	}
+	ptr.signature = sig
+
 	return nil
 }

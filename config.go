@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 */
 import "C"
 import (
@@ -36,14 +35,14 @@ const (
 )
 
 type ConfigEntry struct {
-	Name string
+	Name  string
 	Value string
 	Level ConfigLevel
 }
 
 func newConfigEntryFromC(centry *C.git_config_entry) *ConfigEntry {
 	return &ConfigEntry{
-		Name: C.GoString(centry.name),
+		Name:  C.GoString(centry.name),
 		Value: C.GoString(centry.value),
 		Level: ConfigLevel(centry.level),
 	}
@@ -74,7 +73,6 @@ func (c *Config) AddFile(path string, level ConfigLevel, force bool) error {
 
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-
 
 	ret := C.git_config_add_file_ondisk(c.ptr, cpath, C.git_config_level_t(level), cbool(force))
 	if ret < 0 {
@@ -130,7 +128,6 @@ func (c *Config) LookupString(name string) (string, error) {
 
 	return C.GoString(ptr), nil
 }
-
 
 func (c *Config) LookupBool(name string) (bool, error) {
 	var out C.int
@@ -234,6 +231,9 @@ func (c *Config) Free() {
 func (c *Config) SetInt32(name string, value int32) (err error) {
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	ret := C.git_config_set_int32(c.ptr, cname, C.int32_t(value))
 	if ret < 0 {
@@ -342,18 +342,6 @@ func OpenOndisk(parent *Config, path string) (*Config, error) {
 	return config, nil
 }
 
-// Refresh refreshes the configuration to reflect any changes made externally e.g. on disk
-func (c *Config) Refresh() error {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	if ret := C.git_config_refresh(c.ptr); ret < 0 {
-		return MakeGitError(ret)
-	}
-
-	return nil
-}
-
 type ConfigIterator struct {
 	ptr *C.git_config_iterator
 }
@@ -361,6 +349,9 @@ type ConfigIterator struct {
 // Next returns the next entry for this iterator
 func (iter *ConfigIterator) Next() (*ConfigEntry, error) {
 	var centry *C.git_config_entry
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	ret := C.git_config_next(&centry, iter.ptr)
 	if ret < 0 {
@@ -375,3 +366,47 @@ func (iter *ConfigIterator) Free() {
 	C.free(unsafe.Pointer(iter.ptr))
 }
 
+func ConfigFindGlobal() (string, error) {
+	var buf C.git_buf
+	defer C.git_buf_free(&buf)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ret := C.git_config_find_global(&buf)
+	if ret < 0 {
+		return "", MakeGitError(ret)
+	}
+
+	return C.GoString(buf.ptr), nil
+}
+
+func ConfigFindSystem() (string, error) {
+	var buf C.git_buf
+	defer C.git_buf_free(&buf)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ret := C.git_config_find_system(&buf)
+	if ret < 0 {
+		return "", MakeGitError(ret)
+	}
+
+	return C.GoString(buf.ptr), nil
+}
+
+func ConfigFindXDG() (string, error) {
+	var buf C.git_buf
+	defer C.git_buf_free(&buf)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ret := C.git_config_find_xdg(&buf)
+	if ret < 0 {
+		return "", MakeGitError(ret)
+	}
+
+	return C.GoString(buf.ptr), nil
+}

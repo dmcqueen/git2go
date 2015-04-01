@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 
 extern int _go_git_treewalk(git_tree *tree, git_treewalk_mode mode, void *ptr);
 */
@@ -17,10 +16,10 @@ type Filemode int
 
 const (
 	FilemodeTree           Filemode = C.GIT_FILEMODE_TREE
-	FilemodeBlob                    = C.GIT_FILEMODE_BLOB
-	FilemodeBlobExecutable          = C.GIT_FILEMODE_BLOB_EXECUTABLE
-	FilemodeLink                    = C.GIT_FILEMODE_LINK
-	FilemodeCommit                  = C.GIT_FILEMODE_COMMIT
+	FilemodeBlob           Filemode = C.GIT_FILEMODE_BLOB
+	FilemodeBlobExecutable Filemode = C.GIT_FILEMODE_BLOB_EXECUTABLE
+	FilemodeLink           Filemode = C.GIT_FILEMODE_LINK
+	FilemodeCommit         Filemode = C.GIT_FILEMODE_COMMIT
 )
 
 type Tree struct {
@@ -32,7 +31,7 @@ type TreeEntry struct {
 	Name     string
 	Id       *Oid
 	Type     ObjectType
-	Filemode int
+	Filemode Filemode
 }
 
 func newTreeEntry(entry *C.git_tree_entry) *TreeEntry {
@@ -40,7 +39,7 @@ func newTreeEntry(entry *C.git_tree_entry) *TreeEntry {
 		C.GoString(C.git_tree_entry_name(entry)),
 		newOidFromC(C.git_tree_entry_id(entry)),
 		ObjectType(C.git_tree_entry_type(entry)),
-		int(C.git_tree_entry_filemode(entry)),
+		Filemode(C.git_tree_entry_filemode(entry)),
 	}
 }
 
@@ -162,7 +161,7 @@ func (v *TreeBuilder) Write() (*Oid, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	err := C.git_treebuilder_write(oid.toC(), v.repo.ptr, v.ptr)
+	err := C.git_treebuilder_write(oid.toC(), v.ptr)
 
 	if err < 0 {
 		return nil, MakeGitError(err)

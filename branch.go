@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 */
 import "C"
 
@@ -15,7 +14,7 @@ type BranchType uint
 
 const (
 	BranchLocal  BranchType = C.GIT_BRANCH_LOCAL
-	BranchRemote            = C.GIT_BRANCH_REMOTE
+	BranchRemote BranchType = C.GIT_BRANCH_REMOTE
 )
 
 type Branch struct {
@@ -31,10 +30,7 @@ type BranchIterator struct {
 	repo *Repository
 }
 
-type BranchInfo struct {
-	Branch *Branch
-	Type   BranchType
-}
+type BranchIteratorFunc func(*Branch, BranchType) error
 
 func newBranchIteratorFromC(repo *Repository, ptr *C.git_branch_iterator) *BranchIterator {
 	i := &BranchIterator{repo: repo, ptr: ptr}
@@ -66,8 +62,20 @@ func (i *BranchIterator) Free() {
 	C.git_branch_iterator_free(i.ptr)
 }
 
-func (repo *Repository) NewBranchIterator(flags BranchType) (*BranchIterator, error) {
+func (i *BranchIterator) ForEach(f BranchIteratorFunc) error {
+	b, t, err := i.Next()
 
+	for err == nil {
+		err = f(b, t)
+		if err == nil {
+			b, t, err = i.Next()
+		}
+	}
+
+	return err
+}
+
+func (repo *Repository) NewBranchIterator(flags BranchType) (*BranchIterator, error) {
 	refType := C.git_branch_t(flags)
 	var ptr *C.git_branch_iterator
 
@@ -88,7 +96,10 @@ func (repo *Repository) CreateBranch(branchName string, target *Commit, force bo
 	cBranchName := C.CString(branchName)
 	cForce := cbool(force)
 
-	cSignature := signature.toC()
+	cSignature, err := signature.toC()
+	if err != nil {
+		return nil, err
+	}
 	defer C.git_signature_free(cSignature)
 
 	var cmsg *C.char
@@ -125,7 +136,10 @@ func (b *Branch) Move(newBranchName string, force bool, signature *Signature, ms
 	cNewBranchName := C.CString(newBranchName)
 	cForce := cbool(force)
 
-	cSignature := signature.toC()
+	cSignature, err := signature.toC()
+	if err != nil {
+		return nil, err
+	}
 	defer C.git_signature_free(cSignature)
 
 	var cmsg *C.char

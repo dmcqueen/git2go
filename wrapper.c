@@ -1,9 +1,7 @@
 #include "_cgo_export.h"
-#include "git2.h"
-#include "git2/sys/odb_backend.h"
-#include "git2/sys/refdb_backend.h"
-#include "git2/submodule.h"
-#include "git2/pack.h"
+#include <git2.h>
+#include <git2/sys/odb_backend.h>
+#include <git2/sys/refdb_backend.h>
 
 typedef int (*gogit_submodule_cbk)(git_submodule *sm, const char *name, void *payload);
 
@@ -70,26 +68,18 @@ void _go_git_setup_diff_notify_callbacks(git_diff_options *opts) {
 
 void _go_git_setup_callbacks(git_remote_callbacks *callbacks) {
 	typedef int (*completion_cb)(git_remote_completion_type type, void *data);
-	typedef int (*credentials_cb)(git_cred **cred, const char *url, const char *username_from_url, unsigned int allowed_types,	void *data);
-	typedef int (*transfer_progress_cb)(const git_transfer_progress *stats, void *data);
 	typedef int (*update_tips_cb)(const char *refname, const git_oid *a, const git_oid *b, void *data);
+	typedef int (*push_update_reference_cb)(const char *refname, const char *status, void *data);
+
 	callbacks->sideband_progress = (git_transport_message_cb)sidebandProgressCallback;
 	callbacks->completion = (completion_cb)completionCallback;
-	callbacks->credentials = (credentials_cb)credentialsCallback;
-	callbacks->transfer_progress = (transfer_progress_cb)transferProgressCallback;
+	callbacks->credentials = (git_cred_acquire_cb)credentialsCallback;
+	callbacks->transfer_progress = (git_transfer_progress_cb)transferProgressCallback;
 	callbacks->update_tips = (update_tips_cb)updateTipsCallback;
-}
-
-typedef int (*status_foreach_cb)(const char *ref, const char *msg, void *data);
-
-int _go_git_push_status_foreach(git_push *push, void *data)
-{
-	return git_push_status_foreach(push, (status_foreach_cb)statusForeach, data);
-}
-
-int _go_git_push_set_callbacks(git_push *push, void *packbuilder_progress_data, void *transfer_progress_data)
-{
-	return git_push_set_callbacks(push, packbuilderProgress, packbuilder_progress_data, pushTransferProgress, transfer_progress_data);
+	callbacks->certificate_check = (git_transport_certificate_check_cb) certificateCheckCallback;
+	callbacks->pack_progress = (git_packbuilder_progress) packProgressCallback;
+	callbacks->push_transfer_progress = (git_push_transfer_progress) pushTransferProgressCallback;
+	callbacks->push_update_reference = (push_update_reference_cb) pushUpdateReferenceCallback;
 }
 
 int _go_blob_chunk_cb(char *buffer, size_t maxLen, void *payload)
@@ -103,6 +93,21 @@ int _go_git_blob_create_fromchunks(git_oid *id,
 	void *payload)
 {
     return git_blob_create_fromchunks(id, repo, hintpath, _go_blob_chunk_cb, payload);
+}
+
+int _go_git_index_add_all(git_index *index, const git_strarray *pathspec, unsigned int flags, void *callback) {
+	git_index_matched_path_cb cb = callback ? (git_index_matched_path_cb) &indexMatchedPathCallback : NULL;
+	return git_index_add_all(index, pathspec, flags, cb, callback);
+}
+
+int _go_git_index_update_all(git_index *index, const git_strarray *pathspec, void *callback) {
+	git_index_matched_path_cb cb = callback ? (git_index_matched_path_cb) &indexMatchedPathCallback : NULL;
+	return git_index_update_all(index, pathspec, cb, callback);
+}
+
+int _go_git_index_remove_all(git_index *index, const git_strarray *pathspec, void *callback) {
+	git_index_matched_path_cb cb = callback ? (git_index_matched_path_cb) &indexMatchedPathCallback : NULL;
+	return git_index_remove_all(index, pathspec, cb, callback);
 }
 
 /* EOF */

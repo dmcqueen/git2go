@@ -2,7 +2,6 @@ package git
 
 /*
 #include <git2.h>
-#include <git2/errors.h>
 #include <git2/sys/refdb_backend.h>
 
 extern void _go_git_refdb_backend_free(git_refdb_backend *backend);
@@ -23,6 +22,9 @@ type RefdbBackend struct {
 func (v *Repository) NewRefdb() (refdb *Refdb, err error) {
 	refdb = new(Refdb)
 
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	ret := C.git_refdb_new(&refdb.ptr, v.ptr)
 	if ret < 0 {
 		return nil, MakeGitError(ret)
@@ -38,6 +40,9 @@ func NewRefdbBackendFromC(ptr *C.git_refdb_backend) (backend *RefdbBackend) {
 }
 
 func (v *Refdb) SetBackend(backend *RefdbBackend) (err error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	ret := C.git_refdb_set_backend(v.ptr, backend.ptr)
 	if ret < 0 {
 		backend.Free()

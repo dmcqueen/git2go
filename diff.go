@@ -17,37 +17,37 @@ type DiffFlag int
 
 const (
 	DiffFlagBinary    DiffFlag = C.GIT_DIFF_FLAG_BINARY
-	DiffFlagNotBinary          = C.GIT_DIFF_FLAG_NOT_BINARY
-	DiffFlagValidOid           = C.GIT_DIFF_FLAG_VALID_ID
+	DiffFlagNotBinary DiffFlag = C.GIT_DIFF_FLAG_NOT_BINARY
+	DiffFlagValidOid  DiffFlag = C.GIT_DIFF_FLAG_VALID_ID
 )
 
 type Delta int
 
 const (
 	DeltaUnmodified Delta = C.GIT_DELTA_UNMODIFIED
-	DeltaAdded            = C.GIT_DELTA_ADDED
-	DeltaDeleted          = C.GIT_DELTA_DELETED
-	DeltaModified         = C.GIT_DELTA_MODIFIED
-	DeltaRenamed          = C.GIT_DELTA_RENAMED
-	DeltaCopied           = C.GIT_DELTA_COPIED
-	DeltaIgnored          = C.GIT_DELTA_IGNORED
-	DeltaUntracked        = C.GIT_DELTA_UNTRACKED
-	DeltaTypeChange       = C.GIT_DELTA_TYPECHANGE
+	DeltaAdded      Delta = C.GIT_DELTA_ADDED
+	DeltaDeleted    Delta = C.GIT_DELTA_DELETED
+	DeltaModified   Delta = C.GIT_DELTA_MODIFIED
+	DeltaRenamed    Delta = C.GIT_DELTA_RENAMED
+	DeltaCopied     Delta = C.GIT_DELTA_COPIED
+	DeltaIgnored    Delta = C.GIT_DELTA_IGNORED
+	DeltaUntracked  Delta = C.GIT_DELTA_UNTRACKED
+	DeltaTypeChange Delta = C.GIT_DELTA_TYPECHANGE
 )
 
 type DiffLineType int
 
 const (
 	DiffLineContext      DiffLineType = C.GIT_DIFF_LINE_CONTEXT
-	DiffLineAddition                  = C.GIT_DIFF_LINE_ADDITION
-	DiffLineDeletion                  = C.GIT_DIFF_LINE_DELETION
-	DiffLineContextEOFNL              = C.GIT_DIFF_LINE_CONTEXT_EOFNL
-	DiffLineAddEOFNL                  = C.GIT_DIFF_LINE_ADD_EOFNL
-	DiffLineDelEOFNL                  = C.GIT_DIFF_LINE_DEL_EOFNL
+	DiffLineAddition     DiffLineType = C.GIT_DIFF_LINE_ADDITION
+	DiffLineDeletion     DiffLineType = C.GIT_DIFF_LINE_DELETION
+	DiffLineContextEOFNL DiffLineType = C.GIT_DIFF_LINE_CONTEXT_EOFNL
+	DiffLineAddEOFNL     DiffLineType = C.GIT_DIFF_LINE_ADD_EOFNL
+	DiffLineDelEOFNL     DiffLineType = C.GIT_DIFF_LINE_DEL_EOFNL
 
-	DiffLineFileHdr = C.GIT_DIFF_LINE_FILE_HDR
-	DiffLineHunkHdr = C.GIT_DIFF_LINE_HUNK_HDR
-	DiffLineBinary  = C.GIT_DIFF_LINE_BINARY
+	DiffLineFileHdr DiffLineType = C.GIT_DIFF_LINE_FILE_HDR
+	DiffLineHunkHdr DiffLineType = C.GIT_DIFF_LINE_HUNK_HDR
+	DiffLineBinary  DiffLineType = C.GIT_DIFF_LINE_BINARY
 )
 
 type DiffFile struct {
@@ -164,6 +164,72 @@ func (diff *Diff) Free() error {
 	return nil
 }
 
+func (diff *Diff) FindSimilar(opts *DiffFindOptions) error {
+
+	var copts *C.git_diff_find_options
+	if opts != nil {
+		copts = &C.git_diff_find_options{
+			version:                       C.GIT_DIFF_FIND_OPTIONS_VERSION,
+			flags:                         C.uint32_t(opts.Flags),
+			rename_threshold:              C.uint16_t(opts.RenameThreshold),
+			copy_threshold:                C.uint16_t(opts.CopyThreshold),
+			rename_from_rewrite_threshold: C.uint16_t(opts.RenameFromRewriteThreshold),
+			break_rewrite_threshold:       C.uint16_t(opts.BreakRewriteThreshold),
+			rename_limit:                  C.size_t(opts.RenameLimit),
+		}
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ecode := C.git_diff_find_similar(diff.ptr, copts)
+	if ecode < 0 {
+		return MakeGitError(ecode)
+	}
+
+	return nil
+}
+
+type DiffStats struct {
+	ptr *C.git_diff_stats
+}
+
+func (stats *DiffStats) Free() error {
+	if stats.ptr == nil {
+		return ErrInvalid
+	}
+	runtime.SetFinalizer(stats, nil)
+	C.git_diff_stats_free(stats.ptr)
+	stats.ptr = nil
+	return nil
+}
+
+func (stats *DiffStats) Insertions() int {
+	return int(C.git_diff_stats_insertions(stats.ptr))
+}
+
+func (stats *DiffStats) Deletions() int {
+	return int(C.git_diff_stats_deletions(stats.ptr))
+}
+
+func (stats *DiffStats) FilesChanged() int {
+	return int(C.git_diff_stats_files_changed(stats.ptr))
+}
+
+func (diff *Diff) Stats() (*DiffStats, error) {
+	stats := new(DiffStats)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if ecode := C.git_diff_get_stats(&stats.ptr, diff.ptr); ecode < 0 {
+		return nil, MakeGitError(ecode)
+	}
+	runtime.SetFinalizer(stats, (*DiffStats).Free)
+
+	return stats, nil
+}
+
 type diffForEachData struct {
 	FileCallback DiffForEachFileCallback
 	HunkCallback DiffForEachHunkCallback
@@ -264,6 +330,9 @@ func (diff *Diff) Patch(deltaIndex int) (*Patch, error) {
 	}
 	var patchPtr *C.git_patch
 
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	ecode := C.git_patch_from_diff(&patchPtr, diff.ptr, C.size_t(deltaIndex))
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
@@ -276,33 +345,33 @@ type DiffOptionsFlag int
 
 const (
 	DiffNormal                 DiffOptionsFlag = C.GIT_DIFF_NORMAL
-	DiffReverse                                = C.GIT_DIFF_REVERSE
-	DiffIncludeIgnored                         = C.GIT_DIFF_INCLUDE_IGNORED
-	DiffRecurseIgnoredDirs                     = C.GIT_DIFF_RECURSE_IGNORED_DIRS
-	DiffIncludeUntracked                       = C.GIT_DIFF_INCLUDE_UNTRACKED
-	DiffRecurseUntracked                       = C.GIT_DIFF_RECURSE_UNTRACKED_DIRS
-	DiffIncludeUnmodified                      = C.GIT_DIFF_INCLUDE_UNMODIFIED
-	DiffIncludeTypeChange                      = C.GIT_DIFF_INCLUDE_TYPECHANGE
-	DiffIncludeTypeChangeTrees                 = C.GIT_DIFF_INCLUDE_TYPECHANGE_TREES
-	DiffIgnoreFilemode                         = C.GIT_DIFF_IGNORE_FILEMODE
-	DiffIgnoreSubmodules                       = C.GIT_DIFF_IGNORE_SUBMODULES
-	DiffIgnoreCase                             = C.GIT_DIFF_IGNORE_CASE
+	DiffReverse                DiffOptionsFlag = C.GIT_DIFF_REVERSE
+	DiffIncludeIgnored         DiffOptionsFlag = C.GIT_DIFF_INCLUDE_IGNORED
+	DiffRecurseIgnoredDirs     DiffOptionsFlag = C.GIT_DIFF_RECURSE_IGNORED_DIRS
+	DiffIncludeUntracked       DiffOptionsFlag = C.GIT_DIFF_INCLUDE_UNTRACKED
+	DiffRecurseUntracked       DiffOptionsFlag = C.GIT_DIFF_RECURSE_UNTRACKED_DIRS
+	DiffIncludeUnmodified      DiffOptionsFlag = C.GIT_DIFF_INCLUDE_UNMODIFIED
+	DiffIncludeTypeChange      DiffOptionsFlag = C.GIT_DIFF_INCLUDE_TYPECHANGE
+	DiffIncludeTypeChangeTrees DiffOptionsFlag = C.GIT_DIFF_INCLUDE_TYPECHANGE_TREES
+	DiffIgnoreFilemode         DiffOptionsFlag = C.GIT_DIFF_IGNORE_FILEMODE
+	DiffIgnoreSubmodules       DiffOptionsFlag = C.GIT_DIFF_IGNORE_SUBMODULES
+	DiffIgnoreCase             DiffOptionsFlag = C.GIT_DIFF_IGNORE_CASE
 
-	DiffDisablePathspecMatch    = C.GIT_DIFF_DISABLE_PATHSPEC_MATCH
-	DiffSkipBinaryCheck         = C.GIT_DIFF_SKIP_BINARY_CHECK
-	DiffEnableFastUntrackedDirs = C.GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS
+	DiffDisablePathspecMatch    DiffOptionsFlag = C.GIT_DIFF_DISABLE_PATHSPEC_MATCH
+	DiffSkipBinaryCheck         DiffOptionsFlag = C.GIT_DIFF_SKIP_BINARY_CHECK
+	DiffEnableFastUntrackedDirs DiffOptionsFlag = C.GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS
 
-	DiffForceText   = C.GIT_DIFF_FORCE_TEXT
-	DiffForceBinary = C.GIT_DIFF_FORCE_BINARY
+	DiffForceText   DiffOptionsFlag = C.GIT_DIFF_FORCE_TEXT
+	DiffForceBinary DiffOptionsFlag = C.GIT_DIFF_FORCE_BINARY
 
-	DiffIgnoreWhitespace       = C.GIT_DIFF_IGNORE_WHITESPACE
-	DiffIgnoreWhitespaceChange = C.GIT_DIFF_IGNORE_WHITESPACE_CHANGE
-	DiffIgnoreWitespaceEol     = C.GIT_DIFF_IGNORE_WHITESPACE_EOL
+	DiffIgnoreWhitespace       DiffOptionsFlag = C.GIT_DIFF_IGNORE_WHITESPACE
+	DiffIgnoreWhitespaceChange DiffOptionsFlag = C.GIT_DIFF_IGNORE_WHITESPACE_CHANGE
+	DiffIgnoreWitespaceEol     DiffOptionsFlag = C.GIT_DIFF_IGNORE_WHITESPACE_EOL
 
-	DiffShowUntrackedContent = C.GIT_DIFF_SHOW_UNTRACKED_CONTENT
-	DiffShowUnmodified       = C.GIT_DIFF_SHOW_UNMODIFIED
-	DiffPatience             = C.GIT_DIFF_PATIENCE
-	DiffMinimal              = C.GIT_DIFF_MINIMAL
+	DiffShowUntrackedContent DiffOptionsFlag = C.GIT_DIFF_SHOW_UNTRACKED_CONTENT
+	DiffShowUnmodified       DiffOptionsFlag = C.GIT_DIFF_SHOW_UNMODIFIED
+	DiffPatience             DiffOptionsFlag = C.GIT_DIFF_PATIENCE
+	DiffMinimal              DiffOptionsFlag = C.GIT_DIFF_MINIMAL
 )
 
 type DiffNotifyCallback func(diffSoFar *Diff, deltaToAdd DiffDelta, matchedPathspec string) error
@@ -313,8 +382,8 @@ type DiffOptions struct {
 	Pathspec         []string
 	NotifyCallback   DiffNotifyCallback
 
-	ContextLines   uint16
-	InterhunkLines uint16
+	ContextLines   uint32
+	InterhunkLines uint32
 	IdAbbrev       uint16
 
 	MaxSize int
@@ -325,6 +394,10 @@ type DiffOptions struct {
 
 func DefaultDiffOptions() (DiffOptions, error) {
 	opts := C.git_diff_options{}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	ecode := C.git_diff_init_options(&opts, C.GIT_DIFF_OPTIONS_VERSION)
 	if ecode < 0 {
 		return DiffOptions{}, MakeGitError(ecode)
@@ -334,10 +407,64 @@ func DefaultDiffOptions() (DiffOptions, error) {
 		Flags:            DiffOptionsFlag(opts.flags),
 		IgnoreSubmodules: SubmoduleIgnore(opts.ignore_submodules),
 		Pathspec:         makeStringsFromCStrings(opts.pathspec.strings, int(opts.pathspec.count)),
-		ContextLines:     uint16(opts.context_lines),
-		InterhunkLines:   uint16(opts.interhunk_lines),
+		ContextLines:     uint32(opts.context_lines),
+		InterhunkLines:   uint32(opts.interhunk_lines),
 		IdAbbrev:         uint16(opts.id_abbrev),
 		MaxSize:          int(opts.max_size),
+		OldPrefix:        "a",
+		NewPrefix:        "b",
+	}, nil
+}
+
+type DiffFindOptionsFlag int
+
+const (
+	DiffFindByConfig                    DiffFindOptionsFlag = C.GIT_DIFF_FIND_BY_CONFIG
+	DiffFindRenames                     DiffFindOptionsFlag = C.GIT_DIFF_FIND_RENAMES
+	DiffFindRenamesFromRewrites         DiffFindOptionsFlag = C.GIT_DIFF_FIND_RENAMES_FROM_REWRITES
+	DiffFindCopies                      DiffFindOptionsFlag = C.GIT_DIFF_FIND_COPIES
+	DiffFindCopiesFromUnmodified        DiffFindOptionsFlag = C.GIT_DIFF_FIND_COPIES_FROM_UNMODIFIED
+	DiffFindRewrites                    DiffFindOptionsFlag = C.GIT_DIFF_FIND_REWRITES
+	DiffFindBreakRewrites               DiffFindOptionsFlag = C.GIT_DIFF_BREAK_REWRITES
+	DiffFindAndBreakRewrites            DiffFindOptionsFlag = C.GIT_DIFF_FIND_AND_BREAK_REWRITES
+	DiffFindForUntracked                DiffFindOptionsFlag = C.GIT_DIFF_FIND_FOR_UNTRACKED
+	DiffFindAll                         DiffFindOptionsFlag = C.GIT_DIFF_FIND_ALL
+	DiffFindIgnoreLeadingWhitespace     DiffFindOptionsFlag = C.GIT_DIFF_FIND_IGNORE_LEADING_WHITESPACE
+	DiffFindIgnoreWhitespace            DiffFindOptionsFlag = C.GIT_DIFF_FIND_IGNORE_WHITESPACE
+	DiffFindDontIgnoreWhitespace        DiffFindOptionsFlag = C.GIT_DIFF_FIND_DONT_IGNORE_WHITESPACE
+	DiffFindExactMatchOnly              DiffFindOptionsFlag = C.GIT_DIFF_FIND_EXACT_MATCH_ONLY
+	DiffFindBreakRewritesForRenamesOnly DiffFindOptionsFlag = C.GIT_DIFF_BREAK_REWRITES_FOR_RENAMES_ONLY
+	DiffFindRemoveUnmodified            DiffFindOptionsFlag = C.GIT_DIFF_FIND_REMOVE_UNMODIFIED
+)
+
+//TODO implement git_diff_similarity_metric
+type DiffFindOptions struct {
+	Flags                      DiffFindOptionsFlag
+	RenameThreshold            uint16
+	CopyThreshold              uint16
+	RenameFromRewriteThreshold uint16
+	BreakRewriteThreshold      uint16
+	RenameLimit                uint
+}
+
+func DefaultDiffFindOptions() (DiffFindOptions, error) {
+	opts := C.git_diff_find_options{}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ecode := C.git_diff_find_init_options(&opts, C.GIT_DIFF_FIND_OPTIONS_VERSION)
+	if ecode < 0 {
+		return DiffFindOptions{}, MakeGitError(ecode)
+	}
+
+	return DiffFindOptions{
+		Flags:                      DiffFindOptionsFlag(opts.flags),
+		RenameThreshold:            uint16(opts.rename_threshold),
+		CopyThreshold:              uint16(opts.copy_threshold),
+		RenameFromRewriteThreshold: uint16(opts.rename_from_rewrite_threshold),
+		BreakRewriteThreshold:      uint16(opts.break_rewrite_threshold),
+		RenameLimit:                uint(opts.rename_limit),
 	}, nil
 }
 
@@ -374,6 +501,47 @@ func diffNotifyCb(_diff_so_far unsafe.Pointer, delta_to_add *C.git_diff_delta, m
 	return 0
 }
 
+func diffOptionsToC(opts *DiffOptions) (copts *C.git_diff_options, notifyData *diffNotifyData) {
+	cpathspec := C.git_strarray{}
+	if opts != nil {
+		notifyData = &diffNotifyData{
+			Callback: opts.NotifyCallback,
+		}
+		if opts.Pathspec != nil {
+			cpathspec.count = C.size_t(len(opts.Pathspec))
+			cpathspec.strings = makeCStringsFromStrings(opts.Pathspec)
+		}
+
+		copts = &C.git_diff_options{
+			version:           C.GIT_DIFF_OPTIONS_VERSION,
+			flags:             C.uint32_t(opts.Flags),
+			ignore_submodules: C.git_submodule_ignore_t(opts.IgnoreSubmodules),
+			pathspec:          cpathspec,
+			context_lines:     C.uint32_t(opts.ContextLines),
+			interhunk_lines:   C.uint32_t(opts.InterhunkLines),
+			id_abbrev:         C.uint16_t(opts.IdAbbrev),
+			max_size:          C.git_off_t(opts.MaxSize),
+			old_prefix:        C.CString(opts.OldPrefix),
+			new_prefix:        C.CString(opts.NewPrefix),
+		}
+
+		if opts.NotifyCallback != nil {
+			C._go_git_setup_diff_notify_callbacks(copts)
+			copts.notify_payload = unsafe.Pointer(notifyData)
+		}
+	}
+	return
+}
+
+func freeDiffOptions(copts *C.git_diff_options) {
+	if copts != nil {
+		cpathspec := copts.pathspec
+		freeStrarray(&cpathspec)
+		C.free(unsafe.Pointer(copts.old_prefix))
+		C.free(unsafe.Pointer(copts.new_prefix))
+	}
+}
+
 func (v *Repository) DiffTreeToTree(oldTree, newTree *Tree, opts *DiffOptions) (*Diff, error) {
 	var diffPtr *C.git_diff
 	var oldPtr, newPtr *C.git_tree
@@ -386,37 +554,38 @@ func (v *Repository) DiffTreeToTree(oldTree, newTree *Tree, opts *DiffOptions) (
 		newPtr = newTree.cast_ptr
 	}
 
-	cpathspec := C.git_strarray{}
-	var copts *C.git_diff_options
-	var notifyData *diffNotifyData
-	if opts != nil {
-		notifyData = &diffNotifyData{
-			Callback: opts.NotifyCallback,
-		}
-		if opts.Pathspec != nil {
-			cpathspec.count = C.size_t(len(opts.Pathspec))
-			cpathspec.strings = makeCStringsFromStrings(opts.Pathspec)
-			defer freeStrarray(&cpathspec)
-		}
+	copts, notifyData := diffOptionsToC(opts)
+	defer freeDiffOptions(copts)
 
-		copts = &C.git_diff_options{
-			version:           C.GIT_DIFF_OPTIONS_VERSION,
-			flags:             C.uint32_t(opts.Flags),
-			ignore_submodules: C.git_submodule_ignore_t(opts.IgnoreSubmodules),
-			pathspec:          cpathspec,
-			context_lines:     C.uint16_t(opts.ContextLines),
-			interhunk_lines:   C.uint16_t(opts.InterhunkLines),
-			id_abbrev:         C.uint16_t(opts.IdAbbrev),
-			max_size:          C.git_off_t(opts.MaxSize),
-		}
-
-		if opts.NotifyCallback != nil {
-			C._go_git_setup_diff_notify_callbacks(copts)
-			copts.notify_payload = unsafe.Pointer(notifyData)
-		}
-	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	ecode := C.git_diff_tree_to_tree(&diffPtr, v.ptr, oldPtr, newPtr, copts)
+	if ecode < 0 {
+		return nil, MakeGitError(ecode)
+	}
+
+	if notifyData != nil && notifyData.Diff != nil {
+		return notifyData.Diff, nil
+	}
+	return newDiffFromC(diffPtr), nil
+}
+
+func (v *Repository) DiffTreeToWorkdir(oldTree *Tree, opts *DiffOptions) (*Diff, error) {
+	var diffPtr *C.git_diff
+	var oldPtr *C.git_tree
+
+	if oldTree != nil {
+		oldPtr = oldTree.cast_ptr
+	}
+
+	copts, notifyData := diffOptionsToC(opts)
+	defer freeDiffOptions(copts)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ecode := C.git_diff_tree_to_workdir(&diffPtr, v.ptr, oldPtr, copts)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
 	}
